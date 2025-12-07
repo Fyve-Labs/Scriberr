@@ -168,7 +168,7 @@ interface TranscriptionConfigDialogProps {
 }
 
 const DEFAULT_PARAMS: WhisperXParams = {
-  model_family: "whisper",
+  model_family: "modal-whisper",
   model: "small",
   model_cache_only: false,
   device: "cpu",
@@ -510,6 +510,9 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-white dark:bg-carbon-800 border-carbon-200 dark:border-carbon-700">
+                <SelectItem value="modal-whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
+                  Modal - Whisper (OpenAI)
+                </SelectItem>
                 <SelectItem value="whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   Whisper (OpenAI)
                 </SelectItem>

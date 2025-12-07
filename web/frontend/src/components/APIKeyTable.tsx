@@ -31,7 +31,7 @@ export function APIKeyTable({ refreshTrigger, onKeyChange }: APIKeyTableProps) {
 
 			if (response.ok) {
 				const data = await response.json();
-				setApiKeys(data.api_keys || []);
+				setApiKeys((data.api_keys || []).filter((k: APIKey) => k.name !== "System"));
 			} else {
 				console.error("Failed to fetch API keys");
 				setApiKeys([]);

@@ -8,9 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"scriberr/internal/models"
+	"scriberr/internal/transcription/interfaces"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/modal-labs/libmodal/modal-go"
+	_ "scriberr/api-docs" // Import generated Swagger docs
 	"scriberr/internal/api"
 	"scriberr/internal/auth"
 	"scriberr/internal/config"
@@ -22,8 +27,6 @@ import (
 	"scriberr/internal/transcription/adapters"
 	"scriberr/internal/transcription/registry"
 	"scriberr/pkg/logger"
-
-	_ "scriberr/api-docs" // Import generated Swagger docs
 )
 
 // Version information (set by GoReleaser)
@@ -103,6 +106,19 @@ func main() {
 	chatRepo := repository.NewChatRepository(database.DB)
 	noteRepo := repository.NewNoteRepository(database.DB)
 	speakerMappingRepo := repository.NewSpeakerMappingRepository(database.DB)
+
+	// Generate system API key
+	sysApiKey, err := createSystemAPIKey(apiKeyRepo)
+	if err != nil {
+		logger.Error("Failed to create System API key", "error", err)
+		os.Exit(1)
+	}
+
+	if modalAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.ModalCloud); err == nil {
+		if a, ok := modalAdapter.(*adapters.ModalCloudAdapter); ok {
+			a.ScriberrAPIKey = sysApiKey.Key
+		}
+	}
 
 	// Initialize services
 	logger.Startup("service", "Initializing services")
@@ -198,7 +214,34 @@ func main() {
 	logger.Info("Server stopped")
 }
 
-// registerAdapters registers all transcription and diarization adapters with config-based paths
+func createSystemAPIKey(repo repository.APIKeyRepository) (*models.APIKey, error) {
+	ctx := context.Background()
+	keys, err := repo.ListActive(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var sysKey models.APIKey
+	for _, key := range keys {
+		if key.Name == "System" {
+			return &key, nil
+		}
+	}
+
+	des := "Auto generated System API key"
+	sysKey = models.APIKey{
+		Key:         uuid.New().String(),
+		Name:        "System",
+		Description: &des,
+		IsActive:    true,
+	}
+
+	if err := repo.Create(ctx, &sysKey); err != nil {
+		return nil, err
+	}
+
+	return &sysKey, nil
+}
+
 func registerAdapters(cfg *config.Config) {
 	logger.Info("Registering adapters with environment path", "whisperx_env", cfg.WhisperXEnv)
 
@@ -209,8 +252,22 @@ func registerAdapters(cfg *config.Config) {
 	pyannoteEnvPath := filepath.Join(cfg.WhisperXEnv, "pyannote")
 
 	// Register transcription adapters
-	registry.RegisterTranscriptionAdapter("whisperx",
-		adapters.NewWhisperXAdapter(cfg.WhisperXEnv))
+	whisperx := adapters.NewWhisperXAdapter(cfg.WhisperXEnv)
+	registry.RegisterTranscriptionAdapter("whisperx", whisperx)
+	mc, err := modal.NewClient()
+	if err != nil {
+		logger.Warn("Failed to initialize Modal client. Skipping Modal Adapter", "error", err)
+	}
+	baseURL := "http://" + cfg.Host + ":" + cfg.Port
+	if val := os.Getenv("BASE_URL"); val != "" {
+		baseURL = val
+	}
+
+	registry.RegisterTranscriptionAdapter(interfaces.ModalCloud, adapters.NewModalCloudAdapter(whisperx, mc, baseURL, ""))
+	if val := os.Getenv("ENABLE_WHISPER_MODELS_ONLY"); val != "" {
+		return
+	}
+
 	registry.RegisterTranscriptionAdapter("parakeet",
 		adapters.NewParakeetAdapter(nvidiaEnvPath))
 	registry.RegisterTranscriptionAdapter("canary",

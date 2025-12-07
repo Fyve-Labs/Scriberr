@@ -339,6 +339,8 @@ func (u *UnifiedTranscriptionService) selectModels(params models.WhisperXParams)
 		transcriptionModelID = "whisperx"
 	case "openai":
 		transcriptionModelID = "openai_whisper"
+	case interfaces.ModalCloud:
+		transcriptionModelID = interfaces.ModalCloud
 	default:
 		transcriptionModelID = "whisperx" // Default fallback
 	}
@@ -506,6 +508,8 @@ func (u *UnifiedTranscriptionService) convertParametersForModel(params models.Wh
 		return u.convertToParakeetParams(params)
 	case "canary":
 		return u.convertToCanaryParams(params)
+	case interfaces.ModalCloud:
+		return u.convertToWhisperXParams(params)
 	case "whisperx":
 		return u.convertToWhisperXParams(params)
 	case "pyannote":

@@ -513,10 +513,13 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                 <SelectItem value="modal-whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   Modal - Whisper (OpenAI)
                 </SelectItem>
+                <SelectItem value="runpod-whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
+                  Runpod - Whisper (OpenAI)
+                </SelectItem>
                 <SelectItem value="whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   Whisper (OpenAI)
                 </SelectItem>
-                <SelectItem value="nvidia_parakeet" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
+                {/*<SelectItem value="nvidia_parakeet" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   NVIDIA Parakeet
                 </SelectItem>
                 <SelectItem value="nvidia_canary" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
@@ -524,7 +527,7 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                 </SelectItem>
                 <SelectItem value="openai" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   OpenAI API
-                </SelectItem>
+                </SelectItem>*/}
               </SelectContent>
             </Select>
           </div>

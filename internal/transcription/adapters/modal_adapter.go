@@ -18,8 +18,8 @@ type RemoteAudioInput struct {
 	Headers  map[string]string `json:"headers,omitempty"`
 }
 
-// ModalCloudAdapter is a mock implementation of TranscriptionAdapter
-type ModalCloudAdapter struct {
+// ModalAdapter is a mock implementation of TranscriptionAdapter
+type ModalAdapter struct {
 	*WhisperXAdapter
 	client          *modal.Client
 	FunctionName    string
@@ -27,8 +27,8 @@ type ModalCloudAdapter struct {
 	ScriberrAPIKey  string
 }
 
-func NewModalCloudAdapter(w *WhisperXAdapter, client *modal.Client, baseURL, apiKey string) *ModalCloudAdapter {
-	return &ModalCloudAdapter{
+func NewModalAdapter(w *WhisperXAdapter, client *modal.Client, baseURL, apiKey string) *ModalAdapter {
+	return &ModalAdapter{
 		WhisperXAdapter: w,
 		client:          client,
 		FunctionName:    "scriberr-whisperx",
@@ -36,22 +36,22 @@ func NewModalCloudAdapter(w *WhisperXAdapter, client *modal.Client, baseURL, api
 		ScriberrAPIKey:  apiKey,
 	}
 }
-func (m *ModalCloudAdapter) GetCapabilities() interfaces.ModelCapabilities {
+func (m *ModalAdapter) GetCapabilities() interfaces.ModelCapabilities {
 	return interfaces.ModelCapabilities{
-		ModelID:     interfaces.ModalCloud,
-		ModelFamily: interfaces.ModalCloud,
+		ModelID:     interfaces.WhisperModal,
+		ModelFamily: interfaces.WhisperModal,
 	}
 }
 
-func (m *ModalCloudAdapter) PrepareEnvironment(ctx context.Context) error {
+func (m *ModalAdapter) PrepareEnvironment(ctx context.Context) error {
 	return nil
 }
 
-func (m *ModalCloudAdapter) GetModelPath() string {
+func (m *ModalAdapter) GetModelPath() string {
 	return "/tmp/mock-model"
 }
 
-func (m *ModalCloudAdapter) Transcribe(ctx context.Context, input interfaces.AudioInput, params map[string]interface{}, procCtx interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
+func (m *ModalAdapter) Transcribe(ctx context.Context, input interfaces.AudioInput, params map[string]interface{}, procCtx interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
 	startTime := time.Now()
 	m.LogProcessingStart(input, procCtx)
 	defer func() {
@@ -101,29 +101,13 @@ func (m *ModalCloudAdapter) Transcribe(ctx context.Context, input interfaces.Aud
 	return result, nil
 }
 
-func (m *ModalCloudAdapter) GetSupportedModels() []string {
+func (m *ModalAdapter) GetSupportedModels() []string {
 	return []string{"modal-cloud"}
 }
 
-func (m *ModalCloudAdapter) parseResult(ret any) (*interfaces.TranscriptResult, error) {
+func (m *ModalAdapter) parseResult(ret any) (*interfaces.TranscriptResult, error) {
 	// Parse WhisperX JSON format
-	var whisperxResult struct {
-		Segments []struct {
-			Start   float64 `json:"start"`
-			End     float64 `json:"end"`
-			Text    string  `json:"text"`
-			Speaker *string `json:"speaker,omitempty"`
-		} `json:"segments"`
-		Word []struct {
-			Start   float64 `json:"start"`
-			End     float64 `json:"end"`
-			Word    string  `json:"word"`
-			Score   float64 `json:"score"`
-			Speaker *string `json:"speaker,omitempty"`
-		} `json:"word_segments,omitempty"`
-		Language string `json:"language"`
-		Text     string `json:"text,omitempty"`
-	}
+	var whisperxResult WhisperxResult
 	retStr, ok := ret.(string)
 	if !ok {
 		return nil, fmt.Errorf("response must be a json string")

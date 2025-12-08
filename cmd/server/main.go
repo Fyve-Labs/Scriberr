@@ -13,8 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/modal-labs/libmodal/modal-go"
 	_ "scriberr/api-docs" // Import generated Swagger docs
 	"scriberr/internal/api"
 	"scriberr/internal/auth"
@@ -27,6 +25,9 @@ import (
 	"scriberr/internal/transcription/adapters"
 	"scriberr/internal/transcription/registry"
 	"scriberr/pkg/logger"
+
+	"github.com/google/uuid"
+	"github.com/modal-labs/libmodal/modal-go"
 )
 
 // Version information (set by GoReleaser)
@@ -114,8 +115,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if modalAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.ModalCloud); err == nil {
-		if a, ok := modalAdapter.(*adapters.ModalCloudAdapter); ok {
+	if modalAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.WhisperModal); err == nil {
+		if a, ok := modalAdapter.(*adapters.ModalAdapter); ok {
+			a.ScriberrAPIKey = sysApiKey.Key
+		}
+	}
+	if runpodAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.WhisperRunpod); err == nil {
+		if a, ok := runpodAdapter.(*adapters.RunPodAdapter); ok {
 			a.ScriberrAPIKey = sysApiKey.Key
 		}
 	}
@@ -259,11 +265,12 @@ func registerAdapters(cfg *config.Config) {
 		logger.Warn("Failed to initialize Modal client. Skipping Modal Adapter", "error", err)
 	}
 	baseURL := "http://" + cfg.Host + ":" + cfg.Port
-	if val := os.Getenv("BASE_URL"); val != "" {
+	if val := os.Getenv("PUBLIC_URL"); val != "" {
 		baseURL = val
 	}
 
-	registry.RegisterTranscriptionAdapter(interfaces.ModalCloud, adapters.NewModalCloudAdapter(whisperx, mc, baseURL, ""))
+	registry.RegisterTranscriptionAdapter(interfaces.WhisperModal, adapters.NewModalAdapter(whisperx, mc, baseURL, ""))
+	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx, baseURL, ""))
 	if val := os.Getenv("ENABLE_WHISPER_MODELS_ONLY"); val != "" {
 		return
 	}

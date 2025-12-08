@@ -39,11 +39,11 @@ RUN CGO_ENABLED=0 \
   go build -o /out/scriberr cmd/server/main.go
 
 # Build CLI binaries (cross-platform)
-RUN mkdir -p /out/bin/cli \
-  && GOOS=linux GOARCH=amd64 go build -o /out/bin/cli/scriberr-linux-amd64 ./cmd/scriberr-cli \
-  && GOOS=darwin GOARCH=amd64 go build -o /out/bin/cli/scriberr-darwin-amd64 ./cmd/scriberr-cli \
-  && GOOS=darwin GOARCH=arm64 go build -o /out/bin/cli/scriberr-darwin-arm64 ./cmd/scriberr-cli \
-  && GOOS=windows GOARCH=amd64 go build -o /out/bin/cli/scriberr-windows-amd64.exe ./cmd/scriberr-cli
+#RUN mkdir -p /out/bin/cli \
+#  && GOOS=linux GOARCH=amd64 go build -o /out/bin/cli/scriberr-linux-amd64 ./cmd/scriberr-cli \
+#  && GOOS=darwin GOARCH=amd64 go build -o /out/bin/cli/scriberr-darwin-amd64 ./cmd/scriberr-cli \
+#  && GOOS=darwin GOARCH=arm64 go build -o /out/bin/cli/scriberr-darwin-arm64 ./cmd/scriberr-cli \
+#  && GOOS=windows GOARCH=amd64 go build -o /out/bin/cli/scriberr-windows-amd64.exe ./cmd/scriberr-cli
 
 
 ########################
@@ -65,7 +65,7 @@ WORKDIR /app
 # Build tools: gcc, g++, make for compiling Python C extensions (needed for NeMo dependencies like texterrors)
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       curl ca-certificates ffmpeg git gosu \
+       curl ca-certificates ffmpeg git unzip gosu \
        build-essential gcc g++ make python3-dev \
   && rm -rf /var/lib/apt/lists/*
 
@@ -91,7 +91,7 @@ RUN groupadd -g 1000 appuser \
 
 # Copy binary and entrypoint script
 COPY --from=go-builder /out/scriberr /app/scriberr
-COPY --from=go-builder /out/bin/cli /app/bin/cli
+#COPY --from=go-builder /out/bin/cli /app/bin/cli
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 # Make entrypoint script executable and set up basic permissions

@@ -7,7 +7,8 @@ import (
 	"scriberr/internal/models"
 )
 
-const ModalCloud = "modal-whisper"
+const WhisperModal = "modal-whisper"
+const WhisperRunpod = "runpod-whisper"
 
 // ModelCapabilities describes what a model can do and its requirements
 type ModelCapabilities struct {

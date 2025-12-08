@@ -67,7 +67,11 @@ type AudioFormatPreprocessor struct{}
 // AppliesTo checks if this preprocessor should be used for the given model
 func (a *AudioFormatPreprocessor) AppliesTo(capabilities interfaces.ModelCapabilities) bool {
 	// Do not do any preprocessing for remote adapter
-	if capabilities.ModelID == interfaces.ModalCloud {
+	if capabilities.ModelID == interfaces.WhisperModal {
+		return false
+	}
+
+	if capabilities.ModelID == interfaces.WhisperRunpod {
 		return false
 	}
 

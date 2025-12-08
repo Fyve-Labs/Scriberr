@@ -3,6 +3,7 @@ package adapters
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,11 +45,9 @@ type RunPodInput struct {
 // RunPodAdapter is a mock implementation of TranscriptionAdapter
 type RunPodAdapter struct {
 	*BaseAdapter
-	FunctionName    string
-	ScriberrBaseURL string
-	ScriberrAPIKey  string
-	RunPodAPIKey    string
-	RunPodEndpoint  string
+	FunctionName   string
+	RunPodAPIKey   string
+	RunPodEndpoint string
 }
 
 type RunpodOption func(*RunPodAdapter)
@@ -65,7 +64,7 @@ func WithRunpodApiKey(key string) RunpodOption {
 	}
 }
 
-func NewRunPodAdapter(w *WhisperXAdapter, baseURL, apiKey string, opts ...RunpodOption) *RunPodAdapter {
+func NewRunPodAdapter(w *WhisperXAdapter, opts ...RunpodOption) *RunPodAdapter {
 	baseAdapter := NewBaseAdapter(interfaces.WhisperRunpod, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
 	endpoint := "http://localhost:8081"
 	if val := os.Getenv("RUNPOD_ENDPOINT"); val != "" {
@@ -73,11 +72,9 @@ func NewRunPodAdapter(w *WhisperXAdapter, baseURL, apiKey string, opts ...Runpod
 	}
 
 	adapter := &RunPodAdapter{
-		BaseAdapter:     baseAdapter,
-		ScriberrBaseURL: baseURL,
-		ScriberrAPIKey:  apiKey,
-		RunPodEndpoint:  endpoint,
-		RunPodAPIKey:    os.Getenv("RUNPOD_API_KEY"),
+		BaseAdapter:    baseAdapter,
+		RunPodEndpoint: endpoint,
+		RunPodAPIKey:   os.Getenv("RUNPOD_API_KEY"),
 	}
 
 	for _, opt := range opts {
@@ -121,11 +118,12 @@ func (m *RunPodAdapter) Transcribe(ctx context.Context, input interfaces.AudioIn
 	}
 
 	logger.Debug("Executing Runpod", "endpoint", m.RunPodEndpoint)
-	remoteURL := fmt.Sprintf("%s/api/v1/transcription/%s/audio", m.ScriberrBaseURL, procCtx.JobID)
-	params["audio"] = remoteURL
-	params["download_headers"] = map[string]string{
-		"x-api-key": m.ScriberrAPIKey,
+	audioBytes, err := os.ReadFile(input.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("read audio file: %w", err)
 	}
+	encodedAudio := base64.StdEncoding.EncodeToString(audioBytes)
+	params["audio_base64"] = encodedAudio
 
 	ret, err := m.request(ctx, params)
 	if err != nil {
@@ -135,7 +133,7 @@ func (m *RunPodAdapter) Transcribe(ctx context.Context, input interfaces.AudioIn
 	// Parse result
 	result, err := m.parseResult(ret)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse result: %w", err)
+		return nil, fmt.Errorf("parse result: %w", err)
 	}
 
 	result.ProcessingTime = time.Since(startTime)

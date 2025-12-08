@@ -2,8 +2,10 @@ package adapters
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 	"scriberr/internal/transcription/interfaces"
 	"scriberr/pkg/logger"
 	"strings"
@@ -12,30 +14,20 @@ import (
 	"github.com/modal-labs/libmodal/modal-go"
 )
 
-type RemoteAudioInput struct {
-	FilePath string            `json:"file_path"`
-	Format   string            `json:"format"`
-	Headers  map[string]string `json:"headers,omitempty"`
-}
-
-// ModalAdapter is a mock implementation of TranscriptionAdapter
 type ModalAdapter struct {
 	*WhisperXAdapter
-	client          *modal.Client
-	FunctionName    string
-	ScriberrBaseURL string
-	ScriberrAPIKey  string
+	client       *modal.Client
+	FunctionName string
 }
 
-func NewModalAdapter(w *WhisperXAdapter, client *modal.Client, baseURL, apiKey string) *ModalAdapter {
+func NewModalAdapter(w *WhisperXAdapter, client *modal.Client) *ModalAdapter {
 	return &ModalAdapter{
 		WhisperXAdapter: w,
 		client:          client,
 		FunctionName:    "scriberr-whisperx",
-		ScriberrBaseURL: baseURL,
-		ScriberrAPIKey:  apiKey,
 	}
 }
+
 func (m *ModalAdapter) GetCapabilities() interfaces.ModelCapabilities {
 	return interfaces.ModelCapabilities{
 		ModelID:     interfaces.WhisperModal,
@@ -45,10 +37,6 @@ func (m *ModalAdapter) GetCapabilities() interfaces.ModelCapabilities {
 
 func (m *ModalAdapter) PrepareEnvironment(ctx context.Context) error {
 	return nil
-}
-
-func (m *ModalAdapter) GetModelPath() string {
-	return "/tmp/mock-model"
 }
 
 func (m *ModalAdapter) Transcribe(ctx context.Context, input interfaces.AudioInput, params map[string]interface{}, procCtx interfaces.ProcessingContext) (*interfaces.TranscriptResult, error) {
@@ -68,17 +56,13 @@ func (m *ModalAdapter) Transcribe(ctx context.Context, input interfaces.AudioInp
 	}
 
 	logger.Debug("Executing Modal", "function", fmt.Sprintf("%s:transcribe", m.FunctionName))
-	// Rewrite input
-	remoteURL := fmt.Sprintf("%s/api/v1/transcription/%s/audio", m.ScriberrBaseURL, procCtx.JobID)
-	remoteInput := &RemoteAudioInput{
-		FilePath: remoteURL,
-		Format:   input.Format,
-		Headers: map[string]string{
-			"x-api-key": m.ScriberrAPIKey,
-		},
+	audioBytes, err := os.ReadFile(input.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read audio file: %w", err)
 	}
-
-	ret, err := transcribe.Remote(ctx, []any{procCtx.JobID, remoteInput, params}, nil)
+	encodedAudio := base64.StdEncoding.EncodeToString(audioBytes)
+	params["audio_base64"] = encodedAudio
+	ret, err := transcribe.Remote(ctx, []any{procCtx.JobID, params}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("call Modal function: %w", err)
 	}
@@ -123,7 +107,7 @@ func (m *ModalAdapter) parseResult(ret any) (*interfaces.TranscriptResult, error
 		Language:     whisperxResult.Language,
 		Segments:     make([]interfaces.TranscriptSegment, len(whisperxResult.Segments)),
 		WordSegments: make([]interfaces.TranscriptWord, len(whisperxResult.Word)),
-		Confidence:   0.0, // WhisperX doesn't provide overall confidence
+		Confidence:   0.0,
 	}
 
 	// Convert segments

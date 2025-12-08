@@ -109,21 +109,10 @@ func main() {
 	speakerMappingRepo := repository.NewSpeakerMappingRepository(database.DB)
 
 	// Generate system API key
-	sysApiKey, err := createSystemAPIKey(apiKeyRepo)
+	_, err := createSystemAPIKey(apiKeyRepo)
 	if err != nil {
 		logger.Error("Failed to create System API key", "error", err)
 		os.Exit(1)
-	}
-
-	if modalAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.WhisperModal); err == nil {
-		if a, ok := modalAdapter.(*adapters.ModalAdapter); ok {
-			a.ScriberrAPIKey = sysApiKey.Key
-		}
-	}
-	if runpodAdapter, err := registry.GetRegistry().GetTranscriptionAdapter(interfaces.WhisperRunpod); err == nil {
-		if a, ok := runpodAdapter.(*adapters.RunPodAdapter); ok {
-			a.ScriberrAPIKey = sysApiKey.Key
-		}
 	}
 
 	// Initialize services
@@ -264,13 +253,9 @@ func registerAdapters(cfg *config.Config) {
 	if err != nil {
 		logger.Warn("Failed to initialize Modal client. Skipping Modal Adapter", "error", err)
 	}
-	baseURL := "http://" + cfg.Host + ":" + cfg.Port
-	if val := os.Getenv("PUBLIC_URL"); val != "" {
-		baseURL = val
-	}
 
-	registry.RegisterTranscriptionAdapter(interfaces.WhisperModal, adapters.NewModalAdapter(whisperx, mc, baseURL, ""))
-	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx, baseURL, ""))
+	registry.RegisterTranscriptionAdapter(interfaces.WhisperModal, adapters.NewModalAdapter(whisperx, mc))
+	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx))
 	if val := os.Getenv("ENABLE_WHISPER_MODELS_ONLY"); val != "" {
 		return
 	}

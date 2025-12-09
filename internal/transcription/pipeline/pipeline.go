@@ -75,6 +75,10 @@ func (a *AudioFormatPreprocessor) AppliesTo(capabilities interfaces.ModelCapabil
 		return false
 	}
 
+	if capabilities.ModelFamily == interfaces.LocalWhisperX {
+		return false
+	}
+
 	// Apply to all models for consistent audio format (mono 16kHz)
 	return true
 }

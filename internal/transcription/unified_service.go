@@ -614,6 +614,7 @@ func (u *UnifiedTranscriptionService) convertToWhisperXParams(params models.Whis
 		"vad_method": params.VadMethod,
 		"vad_onset":  params.VadOnset,
 		"vad_offset": params.VadOffset,
+		"no_align":   params.NoAlign,
 	}
 
 	// Handle pointer fields - only add if not nil

@@ -9,6 +9,7 @@ import (
 
 const WhisperModal = "modal-whisper"
 const WhisperRunpod = "runpod-whisper"
+const LocalWhisperX = "local-whisperx"
 
 // ModelCapabilities describes what a model can do and its requirements
 type ModelCapabilities struct {

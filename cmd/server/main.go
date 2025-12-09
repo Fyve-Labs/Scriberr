@@ -248,7 +248,6 @@ func registerAdapters(cfg *config.Config) {
 
 	// Register transcription adapters
 	whisperx := adapters.NewWhisperXAdapter(cfg.WhisperXEnv)
-	registry.RegisterTranscriptionAdapter("whisperx", whisperx)
 	mc, err := modal.NewClient()
 	if err != nil {
 		logger.Warn("Failed to initialize Modal client. Skipping Modal Adapter", "error", err)
@@ -256,10 +255,20 @@ func registerAdapters(cfg *config.Config) {
 
 	registry.RegisterTranscriptionAdapter(interfaces.WhisperModal, adapters.NewModalAdapter(whisperx, mc))
 	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx))
-	if val := os.Getenv("ENABLE_WHISPER_MODELS_ONLY"); val != "" {
+
+	hasLocalWhisperX := false
+	if localRunpodEndpoint := os.Getenv("LOCAL_WHISPERX_URL"); localRunpodEndpoint != "" {
+		registry.RegisterTranscriptionAdapter("whisperx", adapters.NewRunPodAdapter(whisperx, adapters.WithRunpodBaseURL(localRunpodEndpoint), adapters.WithRunpodModelFamily(interfaces.LocalWhisperX)))
+		hasLocalWhisperX = true
+	}
+
+	if val := os.Getenv("ENABLE_DEFAULT_ADAPTERS"); val == "" {
 		return
 	}
 
+	if !hasLocalWhisperX {
+		registry.RegisterTranscriptionAdapter("whisperx", whisperx)
+	}
 	registry.RegisterTranscriptionAdapter("parakeet",
 		adapters.NewParakeetAdapter(nvidiaEnvPath))
 	registry.RegisterTranscriptionAdapter("canary",

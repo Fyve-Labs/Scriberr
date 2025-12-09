@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const DefaultRunpodBaseURL = "http://localhost:8000"
+
 type WhisperxResult struct {
 	Segments []struct {
 		Start   float64 `json:"start"`
@@ -45,16 +47,22 @@ type RunPodInput struct {
 // RunPodAdapter is a mock implementation of TranscriptionAdapter
 type RunPodAdapter struct {
 	*BaseAdapter
-	FunctionName   string
-	RunPodAPIKey   string
-	RunPodEndpoint string
+	ModelFamily   string
+	RunPodAPIKey  string
+	RunPodBaseURL string
 }
 
 type RunpodOption func(*RunPodAdapter)
 
-func WithRunpodEndpoint(baseURL string) RunpodOption {
+func WithRunpodBaseURL(baseURL string) RunpodOption {
 	return func(r *RunPodAdapter) {
-		r.RunPodEndpoint = baseURL
+		r.RunPodBaseURL = baseURL
+	}
+}
+
+func WithRunpodModelFamily(model string) RunpodOption {
+	return func(r *RunPodAdapter) {
+		r.ModelFamily = model
 	}
 }
 
@@ -66,15 +74,16 @@ func WithRunpodApiKey(key string) RunpodOption {
 
 func NewRunPodAdapter(w *WhisperXAdapter, opts ...RunpodOption) *RunPodAdapter {
 	baseAdapter := NewBaseAdapter(interfaces.WhisperRunpod, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
-	endpoint := "http://localhost:8081"
-	if val := os.Getenv("RUNPOD_ENDPOINT"); val != "" {
-		endpoint = val
+	endpoint := DefaultRunpodBaseURL
+	if val := os.Getenv("RUNPOD_ENDPOINT_ID"); val != "" {
+		endpoint = fmt.Sprintf("https://api.runpod.ai/v2/%s", val)
 	}
 
 	adapter := &RunPodAdapter{
-		BaseAdapter:    baseAdapter,
-		RunPodEndpoint: endpoint,
-		RunPodAPIKey:   os.Getenv("RUNPOD_API_KEY"),
+		BaseAdapter:   baseAdapter,
+		ModelFamily:   interfaces.WhisperRunpod,
+		RunPodBaseURL: endpoint,
+		RunPodAPIKey:  os.Getenv("RUNPOD_AI_API_KEY"),
 	}
 
 	for _, opt := range opts {
@@ -86,8 +95,8 @@ func NewRunPodAdapter(w *WhisperXAdapter, opts ...RunpodOption) *RunPodAdapter {
 
 func (m *RunPodAdapter) GetCapabilities() interfaces.ModelCapabilities {
 	return interfaces.ModelCapabilities{
-		ModelID:     interfaces.WhisperRunpod,
-		ModelFamily: interfaces.WhisperRunpod,
+		ModelID:     m.ModelFamily,
+		ModelFamily: m.ModelFamily,
 	}
 }
 
@@ -117,7 +126,7 @@ func (m *RunPodAdapter) Transcribe(ctx context.Context, input interfaces.AudioIn
 		return nil, fmt.Errorf("invalid parameters: %w", err)
 	}
 
-	logger.Debug("Executing Runpod", "endpoint", m.RunPodEndpoint)
+	logger.Debug("Executing Runpod", "endpoint", m.RunPodBaseURL)
 	audioBytes, err := os.ReadFile(input.FilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read audio file: %w", err)
@@ -219,7 +228,7 @@ func (m *RunPodAdapter) request(ctx context.Context, params map[string]interface
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/runsync", m.RunPodEndpoint), bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("%s/runsync", m.RunPodBaseURL), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}

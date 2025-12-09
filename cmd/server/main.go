@@ -257,7 +257,7 @@ func registerAdapters(cfg *config.Config) {
 	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx))
 
 	hasLocalWhisperX := false
-	if localRunpodEndpoint := os.Getenv("LOCAL_WHISPERX_URL"); localRunpodEndpoint != "" {
+	if localRunpodEndpoint := os.Getenv("LOCAL_WHISPERX_BASE_URL"); localRunpodEndpoint != "" {
 		registry.RegisterTranscriptionAdapter("whisperx", adapters.NewRunPodAdapter(whisperx, adapters.WithRunpodBaseURL(localRunpodEndpoint), adapters.WithRunpodModelFamily(interfaces.LocalWhisperX)))
 		hasLocalWhisperX = true
 	}

@@ -13,12 +13,14 @@ type TranscriptionJob struct {
 	Title                 *string   `json:"title,omitempty" gorm:"type:text"`
 	Status                JobStatus `json:"status" gorm:"type:varchar(20);not null;default:'pending'"`
 	AudioPath             string    `json:"audio_path" gorm:"type:text;not null"`
+	AudioUri              *string   `json:"audio_uri,omitempty" gorm:"type:text"`
 	Transcript            *string   `json:"transcript,omitempty" gorm:"type:text"`
 	Diarization           bool      `json:"diarization" gorm:"type:boolean;default:false"`
 	Summary               *string   `json:"summary,omitempty" gorm:"type:text"`
 	ErrorMessage          *string   `json:"error_message,omitempty" gorm:"type:text"`
 	IsMultiTrack          bool      `json:"is_multi_track" gorm:"type:boolean;default:false"`
 	AupFilePath           *string   `json:"aup_file_path,omitempty" gorm:"type:text"`
+	OutputBucket          *string   `json:"output_bucket,omitempty" gorm:"type:text"`
 	MultiTrackFolder      *string   `json:"multi_track_folder,omitempty" gorm:"type:text"`
 	MergedAudioPath       *string   `json:"merged_audio_path,omitempty" gorm:"type:text"`
 	MergeStatus           string    `json:"merge_status" gorm:"type:varchar(20);default:'none'"` // none, pending, processing, completed, failed
@@ -203,10 +205,10 @@ func (tp *TranscriptionProfile) BeforeSave(tx *gorm.DB) error {
 // LLMConfig represents LLM configuration settings
 type LLMConfig struct {
 	ID            uint      `json:"id" gorm:"primaryKey"`
-	Provider      string    `json:"provider" gorm:"not null;type:varchar(50)"` // "ollama" or "openai"
-	BaseURL       *string   `json:"base_url,omitempty" gorm:"type:text"`       // For Ollama
+	Provider      string    `json:"provider" gorm:"not null;type:varchar(50)"`  // "ollama" or "openai"
+	BaseURL       *string   `json:"base_url,omitempty" gorm:"type:text"`        // For Ollama
 	OpenAIBaseURL *string   `json:"openai_base_url,omitempty" gorm:"type:text"` // For OpenAI custom endpoint
-	APIKey        *string   `json:"api_key,omitempty" gorm:"type:text"`        // For OpenAI (encrypted)
+	APIKey        *string   `json:"api_key,omitempty" gorm:"type:text"`         // For OpenAI (encrypted)
 	IsActive      bool      `json:"is_active" gorm:"type:boolean;default:false"`
 	CreatedAt     time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt     time.Time `json:"updated_at" gorm:"autoUpdateTime"`

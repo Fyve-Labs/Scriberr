@@ -123,6 +123,11 @@ func main() {
 	// Initialize unified transcription processor
 	logger.Startup("transcription", "Initializing transcription service")
 	unifiedProcessor := transcription.NewUnifiedJobProcessor(jobRepo)
+	s3Processor, err := transcription.NewS3JobProcessor(unifiedProcessor, jobRepo, cfg.UploadDir)
+	if err != nil {
+		logger.Error("Failed to initialize S3 processor", "error", err)
+		os.Exit(1)
+	}
 
 	// Bootstrap embedded Python environment (for all adapters)
 	logger.Startup("python", "Preparing Python environment")
@@ -141,7 +146,7 @@ func main() {
 
 	// Initialize task queue
 	logger.Startup("queue", "Starting background processing")
-	taskQueue := queue.NewTaskQueue(2, unifiedProcessor) // 2 workers
+	taskQueue := queue.NewTaskQueue(2, s3Processor) // 2 workers
 	taskQueue.Start()
 	defer taskQueue.Stop()
 

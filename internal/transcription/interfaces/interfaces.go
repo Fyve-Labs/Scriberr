@@ -7,8 +7,8 @@ import (
 	"scriberr/internal/models"
 )
 
-const WhisperModal = "modal-whisper"
-const WhisperRunpod = "runpod-whisper"
+const ModalWhisperX = "modal-whisperx"
+const RunPodWhisperX = "runpod-whisperx"
 const LocalWhisperX = "local-whisperx"
 
 // ModelCapabilities describes what a model can do and its requirements

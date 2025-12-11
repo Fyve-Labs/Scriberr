@@ -19,20 +19,15 @@ const DefaultRunpodBaseURL = "http://localhost:8000"
 
 type WhisperxResult struct {
 	Segments []struct {
-		Start   float64 `json:"start"`
-		End     float64 `json:"end"`
-		Text    string  `json:"text"`
-		Speaker *string `json:"speaker,omitempty"`
+		Start   float64                     `json:"start"`
+		End     float64                     `json:"end"`
+		Text    string                      `json:"text"`
+		Speaker *string                     `json:"speaker,omitempty"`
+		Words   []interfaces.TranscriptWord `json:"words,omitempty"`
 	} `json:"segments"`
-	Word []struct {
-		Start   float64 `json:"start"`
-		End     float64 `json:"end"`
-		Word    string  `json:"word"`
-		Score   float64 `json:"score"`
-		Speaker *string `json:"speaker,omitempty"`
-	} `json:"word_segments,omitempty"`
-	Language string `json:"language"`
-	Text     string `json:"text,omitempty"`
+	Word     []interfaces.TranscriptWord `json:"word_segments,omitempty"`
+	Language string                      `json:"language"`
+	Text     string                      `json:"text,omitempty"`
 }
 
 type WhisperxInput struct {
@@ -73,7 +68,7 @@ func WithRunpodApiKey(key string) RunpodOption {
 }
 
 func NewRunPodAdapter(w *WhisperXAdapter, opts ...RunpodOption) *RunPodAdapter {
-	baseAdapter := NewBaseAdapter(interfaces.WhisperRunpod, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
+	baseAdapter := NewBaseAdapter(interfaces.RunPodWhisperX, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
 	endpoint := DefaultRunpodBaseURL
 	if val := os.Getenv("RUNPOD_ENDPOINT_ID"); val != "" {
 		endpoint = fmt.Sprintf("https://api.runpod.ai/v2/%s", val)
@@ -81,7 +76,7 @@ func NewRunPodAdapter(w *WhisperXAdapter, opts ...RunpodOption) *RunPodAdapter {
 
 	adapter := &RunPodAdapter{
 		BaseAdapter:   baseAdapter,
-		ModelFamily:   interfaces.WhisperRunpod,
+		ModelFamily:   interfaces.RunPodWhisperX,
 		RunPodBaseURL: endpoint,
 		RunPodAPIKey:  os.Getenv("RUNPOD_AI_API_KEY"),
 	}

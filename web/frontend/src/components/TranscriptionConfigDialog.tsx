@@ -510,10 +510,10 @@ export const TranscriptionConfigDialog = memo(function TranscriptionConfigDialog
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-white dark:bg-carbon-800 border-carbon-200 dark:border-carbon-700">
-                <SelectItem value="modal-whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
+                <SelectItem value="modal-whisperx" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   Modal - Whisper (OpenAI)
                 </SelectItem>
-                <SelectItem value="runpod-whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
+                <SelectItem value="runpod-whisperx" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">
                   Runpod - Whisper (OpenAI)
                 </SelectItem>
                 <SelectItem value="whisper" className="text-carbon-900 dark:text-carbon-100 focus:bg-carbon-100 dark:focus:bg-carbon-700">

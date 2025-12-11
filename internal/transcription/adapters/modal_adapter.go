@@ -15,24 +15,26 @@ import (
 )
 
 type ModalAdapter struct {
-	*WhisperXAdapter
+	*BaseAdapter
 	client       *modal.Client
 	FunctionName string
 }
 
 func NewModalAdapter(w *WhisperXAdapter, client *modal.Client) *ModalAdapter {
+	baseAdapter := NewBaseAdapter(interfaces.ModalWhisperX, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
+
 	return &ModalAdapter{
-		WhisperXAdapter: w,
-		client:          client,
-		FunctionName:    "scriberr-whisperx",
+		BaseAdapter:  baseAdapter,
+		client:       client,
+		FunctionName: "scriberr-whisperx",
 	}
 }
 
 func (m *ModalAdapter) GetCapabilities() interfaces.ModelCapabilities {
-	return interfaces.ModelCapabilities{
-		ModelID:     interfaces.WhisperModal,
-		ModelFamily: interfaces.WhisperModal,
-	}
+	caps := m.BaseAdapter.GetCapabilities()
+	caps.ModelID = interfaces.ModalWhisperX
+	caps.ModelFamily = interfaces.ModalWhisperX
+	return caps
 }
 
 func (m *ModalAdapter) PrepareEnvironment(ctx context.Context) error {

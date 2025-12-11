@@ -258,8 +258,8 @@ func registerAdapters(cfg *config.Config) {
 		logger.Warn("Failed to initialize Modal client. Skipping Modal Adapter", "error", err)
 	}
 
-	registry.RegisterTranscriptionAdapter(interfaces.WhisperModal, adapters.NewModalAdapter(whisperx, mc))
-	registry.RegisterTranscriptionAdapter(interfaces.WhisperRunpod, adapters.NewRunPodAdapter(whisperx))
+	registry.RegisterTranscriptionAdapter(interfaces.ModalWhisperX, adapters.NewModalAdapter(whisperx, mc))
+	registry.RegisterTranscriptionAdapter(interfaces.RunPodWhisperX, adapters.NewRunPodAdapter(whisperx))
 
 	hasLocalWhisperX := false
 	if localRunpodEndpoint := os.Getenv("LOCAL_WHISPERX_BASE_URL"); localRunpodEndpoint != "" {

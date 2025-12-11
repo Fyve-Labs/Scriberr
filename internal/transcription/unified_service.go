@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -339,10 +340,10 @@ func (u *UnifiedTranscriptionService) selectModels(params models.WhisperXParams)
 		transcriptionModelID = "whisperx"
 	case "openai":
 		transcriptionModelID = "openai_whisper"
-	case interfaces.WhisperModal:
-		transcriptionModelID = interfaces.WhisperModal
-	case interfaces.WhisperRunpod:
-		transcriptionModelID = interfaces.WhisperRunpod
+	case interfaces.ModalWhisperX:
+		transcriptionModelID = interfaces.ModalWhisperX
+	case interfaces.RunPodWhisperX:
+		transcriptionModelID = interfaces.RunPodWhisperX
 	default:
 		transcriptionModelID = "whisperx" // Default fallback
 	}
@@ -371,7 +372,7 @@ func (u *UnifiedTranscriptionService) selectModels(params models.WhisperXParams)
 // transcriptionIncludesDiarization checks if the transcription model already includes diarization
 func (u *UnifiedTranscriptionService) transcriptionIncludesDiarization(modelID string, params models.WhisperXParams) bool {
 	// WhisperX includes diarization when enabled
-	if modelID == "whisperx" {
+	if slices.Contains([]string{"whisperx", interfaces.LocalWhisperX, interfaces.RunPodWhisperX, interfaces.ModalWhisperX}, modelID) {
 		if params.Diarize {
 			// Check if it's using nvidia_sortformer (which requires separate processing)
 			if params.DiarizeModel == "nvidia_sortformer" {
@@ -510,9 +511,9 @@ func (u *UnifiedTranscriptionService) convertParametersForModel(params models.Wh
 		return u.convertToParakeetParams(params)
 	case "canary":
 		return u.convertToCanaryParams(params)
-	case interfaces.WhisperModal:
+	case interfaces.ModalWhisperX:
 		return u.convertToWhisperXParams(params)
-	case interfaces.WhisperRunpod:
+	case interfaces.RunPodWhisperX:
 		return u.convertToWhisperXParams(params)
 	case "whisperx":
 		return u.convertToWhisperXParams(params)

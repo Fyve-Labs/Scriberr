@@ -43,7 +43,6 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: runpod
           file: Dockerfile
           push: true
           tags: ${{ steps.metadata.outputs.tags }}

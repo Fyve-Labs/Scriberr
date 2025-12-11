@@ -20,12 +20,13 @@ type TranscriptionJob struct {
 	ErrorMessage          *string   `json:"error_message,omitempty" gorm:"type:text"`
 	IsMultiTrack          bool      `json:"is_multi_track" gorm:"type:boolean;default:false"`
 	AupFilePath           *string   `json:"aup_file_path,omitempty" gorm:"type:text"`
-	OutputBucket          *string   `json:"output_bucket,omitempty" gorm:"type:text"`
+	OutputBucketName      *string   `json:"output_bucket_name,omitempty" gorm:"type:text"`
 	MultiTrackFolder      *string   `json:"multi_track_folder,omitempty" gorm:"type:text"`
 	MergedAudioPath       *string   `json:"merged_audio_path,omitempty" gorm:"type:text"`
 	MergeStatus           string    `json:"merge_status" gorm:"type:varchar(20);default:'none'"` // none, pending, processing, completed, failed
 	MergeError            *string   `json:"merge_error,omitempty" gorm:"type:text"`
 	IndividualTranscripts *string   `json:"individual_transcripts,omitempty" gorm:"type:text"` // JSON-serialized map[string]*string
+	Tags                  *string   `json:"tags,omitempty" gorm:"type:text"`                   // JSON-serialized map[string]*string
 	CreatedAt             time.Time `json:"created_at" gorm:"autoCreateTime"`
 	UpdatedAt             time.Time `json:"updated_at" gorm:"autoUpdateTime"`
 

@@ -2,43 +2,43 @@ package transcription
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"scriberr/internal/database"
 	"scriberr/internal/models"
 	"scriberr/internal/repository"
+	"scriberr/internal/transcription/interfaces"
 	"scriberr/pkg/logger"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	ebTypes "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const (
-	DefaultSqsQueueURL  = "https://sqs.us-east-1.amazonaws.com/209479271613/prod-audio-ingest"
-	DefaultOutputBucket = "dev-transcribe-output-209479271613-us-east-1"
+	DefaultEventBridgeSource = "scriberr.transcribe"
 )
 
 // S3JobProcessor implements the existing JobProcessor interface using the new unified service
 type S3JobProcessor struct {
-	unifiedProcessor *UnifiedJobProcessor
-	jobRepo          repository.JobRepository
-	uploadDir        string
-	outputBucket     string
-	s3Client         *s3.Client
+	unifiedProcessor  *UnifiedJobProcessor
+	jobRepo           repository.JobRepository
+	uploadDir         string
+	s3Client          *s3.Client
+	eventBridgeClient *eventbridge.Client
 }
 
 // NewS3JobProcessor creates a new job processor using the unified service
 func NewS3JobProcessor(unifiedProcessor *UnifiedJobProcessor, jobRepo repository.JobRepository, uploadDir string) (*S3JobProcessor, error) {
-	outputBucket := os.Getenv("TRANSCRIBE_OUTPUT_BUCKET")
-	if outputBucket == "" {
-		outputBucket = DefaultOutputBucket
-	}
-
-	// Load AWS configuration
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -46,13 +46,14 @@ func NewS3JobProcessor(unifiedProcessor *UnifiedJobProcessor, jobRepo repository
 	}
 
 	client := s3.NewFromConfig(cfg)
+	eventBridgeClient := eventbridge.NewFromConfig(cfg)
 
 	return &S3JobProcessor{
-		s3Client:         client,
-		uploadDir:        uploadDir,
-		unifiedProcessor: unifiedProcessor,
-		jobRepo:          jobRepo,
-		outputBucket:     outputBucket,
+		s3Client:          client,
+		eventBridgeClient: eventBridgeClient,
+		uploadDir:         uploadDir,
+		unifiedProcessor:  unifiedProcessor,
+		jobRepo:           jobRepo,
 	}, nil
 }
 
@@ -61,8 +62,20 @@ func (u *S3JobProcessor) Initialize(ctx context.Context) error {
 	return u.unifiedProcessor.Initialize(ctx)
 }
 
-// ProcessJob implements the legacy JobProcessor interface
+// ProcessJob implements JobProcessor interface
 func (u *S3JobProcessor) ProcessJob(ctx context.Context, jobID string) error {
+	err := u.ProcessSingleJob(ctx, jobID)
+	event := "COMPLETED"
+	if err != nil {
+		event = "FAILED"
+	}
+
+	go u.publishNotifications(jobID, event)
+
+	return err
+}
+
+func (u *S3JobProcessor) ProcessSingleJob(ctx context.Context, jobID string) error {
 	job, err := u.jobRepo.FindByID(ctx, jobID)
 	if err != nil {
 		return err
@@ -105,34 +118,106 @@ func (u *S3JobProcessor) ProcessJob(ctx context.Context, jobID string) error {
 		transcript = *processedJob.Transcript
 	}
 
-	// Skip S3 upload if no transcript is available
-	if transcript == "" {
+	if transcript == "" || processedJob.OutputBucketName == nil {
+		logger.Debug("Transcript empty or OutputBucketName not set, skipping S3 upload", "job_id", jobID)
 		return nil
 	}
 
-	var outputBucket string
-	if processedJob.OutputBucket != nil {
-		outputBucket = *processedJob.OutputBucket
+	outputBucket := processedJob.OutputBucketName
+	transcriptFilename := fmt.Sprintf("%s.json", getJobName(processedJob))
+
+	var tags []types.Tag
+	if processedJob.Tags != nil {
+		if err := json.Unmarshal([]byte(*processedJob.Tags), &tags); err != nil {
+			return fmt.Errorf("failed to parse job tags: %w", err)
+		}
+	} else {
+		tags = make([]types.Tag, 0)
 	}
 
-	if outputBucket == "" {
-		outputBucket = u.outputBucket
-	}
-
-	uid := strings.TrimSuffix(filename, filepath.Ext(filename))
-
+	tags = append(tags, types.Tag{Key: aws.String("scriberr-id"), Value: aws.String(jobID)})
 	_, err = u.s3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(outputBucket),
-		Key:    aws.String(fmt.Sprintf("%s.json", uid)),
-		Body:   strings.NewReader(transcript),
+		Bucket:  outputBucket,
+		Key:     aws.String(transcriptFilename),
+		Body:    strings.NewReader(transcript),
+		Tagging: aws.String(tagsToS3TaggingString(tags)),
 	})
 
 	if err != nil {
-		return fmt.Errorf("failed to update to S3: %w", err)
-	} else {
-		logger.Info("Uploaded transcription result to S3", "bucket", u.outputBucket, "filename", fmt.Sprintf("%s.json", uid), "job_id", jobID)
+		return fmt.Errorf("failed to upload to S3: %w", err)
 	}
 
+	logger.Info("Uploaded transcription result to S3", "bucket", *outputBucket, "filename", transcriptFilename, "job_id", jobID)
+
+	return nil
+}
+
+func (u *S3JobProcessor) publishNotifications(jobID string, event string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var processedJob models.TranscriptionJob
+	if loadErr := database.DB.Where("id = ?", jobID).First(&processedJob).Error; loadErr != nil {
+		logger.Error("Failed to load job", "job_id", jobID, "event", event, "error", loadErr)
+		return
+	}
+
+	if eventErr := u.sendEventBridgeEvent(ctx, processedJob, event); eventErr != nil {
+		logger.Error("Failed to send EventBridge event", "job_id", jobID, "event", event, "error", eventErr)
+	}
+
+	logger.Info("Job notifications published", "job_id", jobID, "event", event)
+}
+
+// sendEventBridgeEvent sends a job completion event to AWS EventBridge
+func (u *S3JobProcessor) sendEventBridgeEvent(ctx context.Context, job models.TranscriptionJob, eventStatus string) error {
+	eventBusName := os.Getenv("EVENTBRIDGE_BUS_NAME")
+	source := os.Getenv("EVENTBRIDGE_SOURCE")
+	if eventBusName == "" {
+		eventBusName = "default"
+	}
+
+	if source == "" {
+		source = DefaultEventBridgeSource
+	}
+
+	detailType := "Transcribe Job State Change"
+
+	detail := map[string]interface{}{
+		"TranscriptionJobName":   getJobName(job),
+		"TranscriptionJobID":     job.ID,
+		"TranscriptionJobStatus": eventStatus,
+		"DeliveredAt":            time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if job.Transcript != nil && eventStatus == "COMPLETED" {
+		var result interfaces.TranscriptResult
+		if err := json.Unmarshal([]byte(*job.Transcript), &result); err == nil {
+			detail["Result"] = result
+		}
+	}
+
+	detailJSON, err := json.Marshal(detail)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event detail: %w", err)
+	}
+
+	_, err = u.eventBridgeClient.PutEvents(ctx, &eventbridge.PutEventsInput{
+		Entries: []ebTypes.PutEventsRequestEntry{
+			{
+				EventBusName: aws.String(eventBusName),
+				Source:       aws.String(source),
+				DetailType:   aws.String(detailType),
+				Detail:       aws.String(string(detailJSON)),
+			},
+		},
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to put event to EventBridge: %w", err)
+	}
+
+	logger.Info("Sent event to EventBridge", "job_id", job.ID, "status", eventStatus, "event_bus", eventBusName)
 	return nil
 }
 
@@ -187,6 +272,22 @@ func (u *S3JobProcessor) IsMultiTrackJob(jobID string) bool {
 	return u.GetUnifiedService().IsMultiTrackJob(jobID)
 }
 
+// tagsToS3TaggingString converts a map of tags to S3 tagging string format
+func tagsToS3TaggingString(tags []types.Tag) string {
+	if len(tags) == 0 {
+		return ""
+	}
+
+	var tagPairs []string
+	for _, tag := range tags {
+		encodedKey := url.QueryEscape(*tag.Key)
+		encodedValue := url.QueryEscape(*tag.Value)
+		tagPairs = append(tagPairs, fmt.Sprintf("%s=%s", encodedKey, encodedValue))
+	}
+
+	return strings.Join(tagPairs, "&")
+}
+
 // downloadS3File downloads a file from S3 uri
 func (u *S3JobProcessor) downloadS3File(ctx context.Context, uri string, saveTo string) error {
 	if !strings.HasPrefix(uri, "s3://") {
@@ -227,4 +328,12 @@ func (u *S3JobProcessor) downloadS3File(ctx context.Context, uri string, saveTo 
 	}
 
 	return nil
+}
+
+func getJobName(job models.TranscriptionJob) string {
+	if job.Title != nil {
+		return *job.Title
+	}
+
+	return job.ID
 }

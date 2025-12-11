@@ -141,8 +141,8 @@ func SetupRoutes(handler *Handler, authService *auth.AuthService) *gin.Engine {
 			transcription.POST("/quick", handler.SubmitQuickTranscription)
 			transcription.GET("/quick/:id", handler.GetQuickTranscriptionStatus)
 
-			// S3 transcription endpoints
-			transcription.POST("/s3", handler.SubmitS3Transcription)
+			// AWS transcribe compatible endpoint
+			transcription.POST("/aws-transcribe", handler.SubmitAWSTranscribeJob)
 		}
 
 		// Profile routes (require authentication)

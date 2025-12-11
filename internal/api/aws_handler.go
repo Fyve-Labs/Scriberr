@@ -2,41 +2,39 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"scriberr/internal/models"
+	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/transcribe"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// S3TranscriptionRequest represents the S3 job request
-type S3TranscriptionRequest struct {
-	URI          string  `json:"uri"`
-	OutputBucket *string `json:"output_bucket,omitempty"`
-}
-
-// @Summary Submit S3 transcription job
-// @Description Submits transcription job with audio stored in S3
+// @Summary Submit AWS transcribe compatible job
+// @Description Submit AWS transcribe compatible job
 // @Tags config
 // @Accept json
 // @Produce json
-// @Param request body S3TranscriptionRequest true "API Key"
+// @Param request body transcribe.StartTranscriptionJobInput true "API Key"
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /api/v1/transcription/s3 [post]
+// @Router /api/v1/transcription/aws-transcribe [post]
 // @Security ApiKeyAuth
 // @Security BearerAuth
-func (h *Handler) SubmitS3Transcription(c *gin.Context) {
-	var req S3TranscriptionRequest
+func (h *Handler) SubmitAWSTranscribeJob(c *gin.Context) {
+	var req transcribe.StartTranscriptionJobInput
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}
 
-	if req.URI == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "URI is required"})
+	if req.Media == nil || req.Media.MediaFileUri == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Media.MediaFileUri is required"})
 	}
 
 	profile := h.getDefaultProfile(c.Request.Context())
@@ -45,14 +43,34 @@ func (h *Handler) SubmitS3Transcription(c *gin.Context) {
 		return
 	}
 
+	mediaURI := *req.Media.MediaFileUri
+	params := profile.Parameters
+	if req.LanguageCode != "" {
+		shortCode := strings.Split(string(req.LanguageCode), "-")[0]
+		params.Language = &shortCode
+	}
+
+	params.Diarize = true
+	var tags *string
+	if len(req.Tags) > 0 {
+		bytes, err := json.Marshal(req.Tags)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to marshal tags"})
+			return
+		}
+		tags = aws.String(string(bytes))
+	}
+
 	job := models.TranscriptionJob{
-		ID:           uuid.New().String(),
-		AudioPath:    req.URI,
-		AudioUri:     &req.URI,
-		OutputBucket: req.OutputBucket,
-		Parameters:   profile.Parameters,
-		Diarization:  profile.Parameters.Diarize,
-		Status:       models.StatusPending,
+		ID:               uuid.New().String(),
+		AudioPath:        mediaURI,
+		AudioUri:         &mediaURI,
+		Title:            req.TranscriptionJobName,
+		OutputBucketName: req.OutputBucketName,
+		Parameters:       params,
+		Diarization:      params.Diarize,
+		Tags:             tags,
+		Status:           models.StatusPending,
 	}
 
 	if err := h.jobRepo.Create(c.Request.Context(), &job); err != nil {
@@ -68,7 +86,7 @@ func (h *Handler) SubmitS3Transcription(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"job_id": true,
+		"job_id": job.ID,
 	})
 }
 

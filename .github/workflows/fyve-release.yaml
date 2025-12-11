@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push-whisperx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS Credentials
+        uses: Fyve-Labs/actions/configure-aws-credentials@main
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: 209479271613.dkr.ecr.us-east-1.amazonaws.com/fyve/scriberr
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - name: Set deploy tag
+        id: set-tag
+        run: |
+          SHA_TAG=$(echo "$DOCKER_METADATA_OUTPUT_JSON" | jq -r '.tags[-1]')
+          echo "SHA_TAG=$SHA_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: runpod
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+
+      - uses: azure/setup-kubectl@v4
+      - uses: Fyve-Labs/actions/tailscale@main
+      - uses: Fyve-Labs/actions/install-fyve-client@main
+
+      - name: Update scriberr deployment
+        shell: bash
+        env:
+          IMAGE: ${{ steps.set-tag.outputs.SHA_TAG }}
+        run: |
+          fyve kubeconfig > kubeconfig
+          kubectl --kubeconfig kubeconfig -n fyve-system set image deployment/scriberr web=$IMAGE

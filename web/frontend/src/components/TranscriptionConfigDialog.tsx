@@ -168,7 +168,7 @@ interface TranscriptionConfigDialogProps {
 }
 
 const DEFAULT_PARAMS: WhisperXParams = {
-  model_family: "modal-whisper",
+  model_family: "modal-whisperx",
   model: "small",
   model_cache_only: false,
   device: "cpu",

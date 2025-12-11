@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  build-and-push-whisperx:
+  build-and-push-scriberr:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,4 +58,4 @@ jobs:
           IMAGE: ${{ steps.set-tag.outputs.SHA_TAG }}
         run: |
           fyve kubeconfig > kubeconfig
-          kubectl --kubeconfig kubeconfig -n fyve-system set image deployment/scriberr web=$IMAGE
+          kubectl --kubeconfig kubeconfig -n fyve-system set image deployment/scriberr scriberr=$IMAGE

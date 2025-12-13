@@ -11,6 +11,7 @@ import (
 	"scriberr/internal/database"
 	"scriberr/internal/models"
 	"scriberr/internal/repository"
+	"scriberr/internal/service"
 	"scriberr/internal/transcription/interfaces"
 	"scriberr/pkg/logger"
 	"strings"
@@ -31,6 +32,7 @@ const (
 // S3JobProcessor implements the existing JobProcessor interface using the new unified service
 type S3JobProcessor struct {
 	unifiedProcessor  *UnifiedJobProcessor
+	fileService       service.FileService
 	jobRepo           repository.JobRepository
 	uploadDir         string
 	s3Client          *s3.Client
@@ -38,7 +40,7 @@ type S3JobProcessor struct {
 }
 
 // NewS3JobProcessor creates a new job processor using the unified service
-func NewS3JobProcessor(unifiedProcessor *UnifiedJobProcessor, jobRepo repository.JobRepository, uploadDir string) (*S3JobProcessor, error) {
+func NewS3JobProcessor(unifiedProcessor *UnifiedJobProcessor, jobRepo repository.JobRepository, fileService service.FileService, uploadDir string) (*S3JobProcessor, error) {
 	ctx := context.Background()
 	cfg, err := config.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -49,6 +51,7 @@ func NewS3JobProcessor(unifiedProcessor *UnifiedJobProcessor, jobRepo repository
 	eventBridgeClient := eventbridge.NewFromConfig(cfg)
 
 	return &S3JobProcessor{
+		fileService:       fileService,
 		s3Client:          client,
 		eventBridgeClient: eventBridgeClient,
 		uploadDir:         uploadDir,
@@ -88,13 +91,11 @@ func (u *S3JobProcessor) ProcessSingleJob(ctx context.Context, jobID string) err
 		isS3Job = true
 		filename = filepath.Base(*job.AudioUri)
 		audioPath := filepath.Join(u.uploadDir, filename)
-		if _, err := os.Stat(audioPath); err != nil {
-			if os.IsNotExist(err) {
-				logger.Debug("Downloading audio from S3", "uri", *job.AudioUri, filename, "filename", audioPath)
-				err := u.downloadS3File(ctx, *job.AudioUri, audioPath)
-				if err != nil {
-					return err
-				}
+		if _, err := os.Stat(audioPath); os.IsNotExist(err) {
+			logger.Debug("Downloading audio", "uri", *job.AudioUri, "audio_path", audioPath)
+			err := u.fileService.DownloadFile(ctx, *job.AudioUri, audioPath)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -108,11 +109,10 @@ func (u *S3JobProcessor) ProcessSingleJob(ctx context.Context, jobID string) err
 		return err
 	}
 
-	if !isS3Job {
-		return nil
+	if isS3Job {
+		_ = os.Remove(job.AudioPath)
 	}
 
-	//_ = os.Remove(job.AudioPath)
 	// Load the processed result back
 	var processedJob models.TranscriptionJob
 	if loadErr := database.DB.Where("id = ?", jobID).First(&processedJob).Error; loadErr != nil {

@@ -123,7 +123,7 @@ func main() {
 	// Initialize unified transcription processor
 	logger.Startup("transcription", "Initializing transcription service")
 	unifiedProcessor := transcription.NewUnifiedJobProcessor(jobRepo)
-	s3Processor, err := transcription.NewS3JobProcessor(unifiedProcessor, jobRepo, cfg.UploadDir)
+	s3Processor, err := transcription.NewS3JobProcessor(unifiedProcessor, jobRepo, fileService, cfg.UploadDir)
 	if err != nil {
 		logger.Error("Failed to initialize S3 processor", "error", err)
 		os.Exit(1)

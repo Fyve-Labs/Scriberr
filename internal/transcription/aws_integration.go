@@ -88,10 +88,16 @@ func (u *S3JobProcessor) ProcessSingleJob(ctx context.Context, jobID string) err
 		isS3Job = true
 		filename = filepath.Base(*job.AudioUri)
 		audioPath := filepath.Join(u.uploadDir, filename)
-		err := u.downloadS3File(ctx, *job.AudioUri, audioPath)
-		if err != nil {
-			return err
+		if _, err := os.Stat(audioPath); err != nil {
+			if os.IsNotExist(err) {
+				logger.Debug("Downloading audio from S3", "uri", *job.AudioUri, filename, "filename", audioPath)
+				err := u.downloadS3File(ctx, *job.AudioUri, audioPath)
+				if err != nil {
+					return err
+				}
+			}
 		}
+
 		job.AudioPath = audioPath
 		if err = u.jobRepo.Update(ctx, job); err != nil {
 			return err

@@ -23,10 +23,15 @@ type ModalAdapter struct {
 func NewModalAdapter(w *WhisperXAdapter, client *modal.Client) *ModalAdapter {
 	baseAdapter := NewBaseAdapter(interfaces.ModalWhisperX, w.modelPath, w.capabilities, ExtendsWhisperXSchema(w))
 
+	appName := "scriberr-whisperx"
+	if val := os.Getenv("MODAL_APP_NAME"); val != "" {
+		appName = val
+	}
+
 	return &ModalAdapter{
 		BaseAdapter:  baseAdapter,
 		client:       client,
-		FunctionName: "scriberr-whisperx",
+		FunctionName: appName,
 	}
 }
 

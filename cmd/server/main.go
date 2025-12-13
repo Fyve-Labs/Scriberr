@@ -146,7 +146,7 @@ func main() {
 
 	// Initialize task queue
 	logger.Startup("queue", "Starting background processing")
-	taskQueue := queue.NewTaskQueue(2, s3Processor) // 2 workers
+	taskQueue := queue.NewTaskQueue(3, s3Processor) // 3 workers
 	taskQueue.Start()
 	defer taskQueue.Stop()
 

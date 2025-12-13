@@ -128,6 +128,7 @@ func (m *RunPodAdapter) Transcribe(ctx context.Context, input interfaces.AudioIn
 	}
 	encodedAudio := base64.StdEncoding.EncodeToString(audioBytes)
 	params["audio_base64"] = encodedAudio
+	params["job_id"] = procCtx.JobID
 
 	ret, err := m.request(ctx, params)
 	if err != nil {

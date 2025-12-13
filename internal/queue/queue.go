@@ -25,21 +25,21 @@ type RunningJob struct {
 
 // TaskQueue manages transcription job processing
 type TaskQueue struct {
-	minWorkers     int
-	maxWorkers     int
-	currentWorkers int64 // Use atomic for thread-safe access
-	jobChannel     chan string
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	processor      JobProcessor
-	pendingJobs    map[string]string
-	runningJobs    map[string]*RunningJob
-	pendingMutex   sync.RWMutex
-	jobsMutex      sync.RWMutex
-	workerMutex    sync.Mutex
-	autoScale      bool
-	lastScaleTime  time.Time
+	minWorkers        int
+	maxWorkers        int
+	currentWorkers    int64 // Use atomic for thread-safe access
+	jobChannel        chan string
+	ctx               context.Context
+	cancel            context.CancelFunc
+	wg                sync.WaitGroup
+	processor         JobProcessor
+	runningJobs       map[string]*RunningJob
+	jobsMutex         sync.RWMutex
+	workerMutex       sync.Mutex
+	autoScale         bool
+	lastScaleTime     time.Time
+	executedJobsCount int
+	executedJobsMutex sync.RWMutex
 }
 
 // JobProcessor defines the interface for processing jobs
@@ -97,17 +97,17 @@ func NewTaskQueue(legacyWorkers int, processor JobProcessor) *TaskQueue {
 	}
 
 	return &TaskQueue{
-		minWorkers:     min,
-		maxWorkers:     max,
-		currentWorkers: int64(min),
-		jobChannel:     make(chan string, 1000), // Increased buffer for better throughput
-		ctx:            ctx,
-		cancel:         cancel,
-		processor:      processor,
-		runningJobs:    make(map[string]*RunningJob),
-		pendingJobs:    make(map[string]string),
-		autoScale:      autoScale,
-		lastScaleTime:  time.Now(),
+		minWorkers:        min,
+		maxWorkers:        max,
+		currentWorkers:    int64(min),
+		jobChannel:        make(chan string, 1000), // Increased buffer for better throughput
+		ctx:               ctx,
+		cancel:            cancel,
+		processor:         processor,
+		runningJobs:       make(map[string]*RunningJob),
+		autoScale:         autoScale,
+		lastScaleTime:     time.Now(),
+		executedJobsCount: 0,
 	}
 }
 
@@ -131,6 +131,7 @@ func (tq *TaskQueue) Start() {
 	}
 
 	// Start the job scanner
+	tq.scanPendingJobs()
 	tq.wg.Add(1)
 	go tq.jobScanner()
 
@@ -161,18 +162,17 @@ func (tq *TaskQueue) EnqueueJob(jobID string) error {
 	default:
 	}
 
-	tq.pendingMutex.Lock()
-	tq.pendingJobs[jobID] = jobID
-	defer tq.pendingMutex.Unlock()
-
-	select {
-	case tq.jobChannel <- jobID:
-		return nil
-	case <-tq.ctx.Done():
-		return fmt.Errorf("queue is shutting down")
-	default:
-		return fmt.Errorf("queue is full")
+	tq.jobsMutex.Lock()
+	runningJobs := len(tq.runningJobs)
+	tq.jobsMutex.Unlock()
+	workers := int(atomic.LoadInt64(&tq.currentWorkers))
+	if runningJobs < workers {
+		// Start scanning for pending jobs immediately if there are available workers
+		// Do not directly push to the queue channel to ensure FIFO ordering
+		tq.scanPendingJobs()
 	}
+
+	return nil
 }
 
 // worker processes jobs from the channel
@@ -191,10 +191,22 @@ func (tq *TaskQueue) worker(id int) {
 
 			logger.WorkerOperation(id, jobID, "start")
 
-			// Release from pending jobs map
-			tq.pendingMutex.Lock()
-			delete(tq.pendingJobs, jobID)
-			tq.pendingMutex.Unlock()
+			maxExecutionJobs := 0
+			if val, ok := os.LookupEnv("MAX_EXECUTION_JOBS"); ok {
+				if maxJobs, err := strconv.Atoi(val); err == nil && maxJobs > 0 {
+					maxExecutionJobs = maxJobs
+				}
+			}
+
+			tq.executedJobsMutex.Lock()
+			tq.executedJobsCount++
+			tq.executedJobsMutex.Unlock()
+
+			if maxExecutionJobs > 0 && tq.executedJobsCount > maxExecutionJobs {
+				logger.Error("Max execution jobs reached, stopping worker", "worker_id", id)
+				tq.cancel()
+				return
+			}
 
 			// Update job status to processing
 			if err := tq.updateJobStatus(jobID, models.StatusProcessing); err != nil {
@@ -246,6 +258,9 @@ func (tq *TaskQueue) worker(id int) {
 				tq.updateJobStatus(jobID, models.StatusCompleted)
 			}
 
+			// I am free now, let's start next one if available
+			tq.scanPendingJobs()
+
 		case <-tq.ctx.Done():
 			logger.Debug("Worker stopped", "worker_id", id, "reason", "context_cancelled")
 			return
@@ -275,20 +290,23 @@ func (tq *TaskQueue) jobScanner() {
 
 // scanPendingJobs finds pending jobs and enqueues them
 func (tq *TaskQueue) scanPendingJobs() {
+	workers := int(atomic.LoadInt64(&tq.currentWorkers))
+	tq.jobsMutex.Lock()
+	runningJobs := len(tq.runningJobs)
+	tq.jobsMutex.Unlock()
+	availableWorkers := workers - runningJobs
+	if availableWorkers == 0 {
+		return
+	}
+
 	var jobs []models.TranscriptionJob
 
-	if err := database.DB.Where("status = ?", models.StatusPending).Find(&jobs).Error; err != nil {
+	if err := database.DB.Where("status = ?", models.StatusPending).Limit(availableWorkers).Find(&jobs).Error; err != nil {
 		logger.Error("Failed to scan pending jobs", "error", err)
 		return
 	}
-	tq.pendingMutex.Lock()
-	pendingJobs := tq.pendingJobs
-	tq.pendingMutex.Unlock()
 
 	for _, job := range jobs {
-		if _, exists := pendingJobs[job.ID]; exists {
-			continue
-		}
 		select {
 		case tq.jobChannel <- job.ID:
 			logger.Debug("Enqueued pending job", "job_id", job.ID)
@@ -496,8 +514,8 @@ func (tq *TaskQueue) ResetZombieJobs() {
 	for _, job := range zombieJobs {
 		logger.Info("Resetting zombie job", "job_id", job.ID)
 
-		// Mark as failed
-		if err := tq.updateJobStatus(job.ID, models.StatusFailed); err != nil {
+		// Mark as pending again
+		if err := tq.updateJobStatus(job.ID, models.StatusPending); err != nil {
 			logger.Error("Failed to update zombie job status", "job_id", job.ID, "error", err)
 			continue
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"scriberr/internal/models"
+	"scriberr/pkg/logger"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -80,17 +81,27 @@ func (h *Handler) SubmitAWSTranscribeJob(c *gin.Context) {
 
 	// Enqueue the job for transcription
 	if err := h.taskQueue.EnqueueJob(job.ID); err != nil {
-		// If enqueueing fails, revert status but don't fail the upload
-		job.Status = models.StatusUploaded
-		_ = h.jobRepo.Update(c.Request.Context(), &job)
+		logger.Error("Failed to enqueue job", "job_id", job.ID, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to enqueue job"})
+		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"JobID":                job.ID,
-		"TranscriptionJobName": job.Title,
-		"TranscriptionProfile": profile.Name,
-		"OutputBucketName":     job.OutputBucketName,
-	})
+	result := gin.H{
+		"TranscriptionJob": gin.H{
+			"MediaFileUri":         &mediaURI,
+			"TranscriptionJobID":   job.ID,
+			"TranscriptionJobName": job.Title,
+			"TranscriptionProfile": profile.Name,
+		},
+
+		"Tags": req.Tags,
+	}
+
+	if job.OutputBucketName != nil {
+		result["OutputBucketName"] = *job.OutputBucketName
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *Handler) getDefaultProfile(ctx context.Context) *models.TranscriptionProfile {

@@ -86,7 +86,10 @@ func (h *Handler) SubmitAWSTranscribeJob(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"JobID": job.ID,
+		"JobID":                job.ID,
+		"TranscriptionJobName": job.Title,
+		"TranscriptionProfile": profile.Name,
+		"OutputBucketName":     job.OutputBucketName,
 	})
 }
 

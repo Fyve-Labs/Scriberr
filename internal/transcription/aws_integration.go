@@ -81,13 +81,6 @@ func (u *S3JobProcessor) ProcessSingleJob(ctx context.Context, jobID string) err
 		return err
 	}
 
-	if job.Status == models.StatusPending {
-		job.Status = models.StatusProcessing
-		if err = u.jobRepo.Update(ctx, job); err != nil {
-			return fmt.Errorf("failed to update job status to STATUS_PROCESSING: %w", err)
-		}
-	}
-
 	filename := filepath.Base(job.AudioPath)
 
 	isS3Job := false

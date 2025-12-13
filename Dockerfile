@@ -65,7 +65,7 @@ WORKDIR /app
 # Build tools: gcc, g++, make for compiling Python C extensions (needed for NeMo dependencies like texterrors)
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       curl ca-certificates ffmpeg git unzip gosu \
+       curl ca-certificates ffmpeg git unzip sqlite3 gosu \
        build-essential gcc g++ make python3-dev \
   && rm -rf /var/lib/apt/lists/*
 

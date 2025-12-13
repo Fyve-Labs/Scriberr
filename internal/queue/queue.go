@@ -33,7 +33,9 @@ type TaskQueue struct {
 	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 	processor      JobProcessor
+	pendingJobs    map[string]string
 	runningJobs    map[string]*RunningJob
+	pendingMutex   sync.RWMutex
 	jobsMutex      sync.RWMutex
 	workerMutex    sync.Mutex
 	autoScale      bool
@@ -98,11 +100,12 @@ func NewTaskQueue(legacyWorkers int, processor JobProcessor) *TaskQueue {
 		minWorkers:     min,
 		maxWorkers:     max,
 		currentWorkers: int64(min),
-		jobChannel:     make(chan string, 200), // Increased buffer for better throughput
+		jobChannel:     make(chan string, 1000), // Increased buffer for better throughput
 		ctx:            ctx,
 		cancel:         cancel,
 		processor:      processor,
 		runningJobs:    make(map[string]*RunningJob),
+		pendingJobs:    make(map[string]string),
 		autoScale:      autoScale,
 		lastScaleTime:  time.Now(),
 	}
@@ -158,6 +161,10 @@ func (tq *TaskQueue) EnqueueJob(jobID string) error {
 	default:
 	}
 
+	tq.pendingMutex.Lock()
+	tq.pendingJobs[jobID] = jobID
+	defer tq.pendingMutex.Unlock()
+
 	select {
 	case tq.jobChannel <- jobID:
 		return nil
@@ -183,6 +190,11 @@ func (tq *TaskQueue) worker(id int) {
 			}
 
 			logger.WorkerOperation(id, jobID, "start")
+
+			// Release from pending jobs map
+			tq.pendingMutex.Lock()
+			delete(tq.pendingJobs, jobID)
+			tq.pendingMutex.Unlock()
 
 			// Update job status to processing
 			if err := tq.updateJobStatus(jobID, models.StatusProcessing); err != nil {
@@ -269,8 +281,14 @@ func (tq *TaskQueue) scanPendingJobs() {
 		logger.Error("Failed to scan pending jobs", "error", err)
 		return
 	}
+	tq.pendingMutex.Lock()
+	pendingJobs := tq.pendingJobs
+	tq.pendingMutex.Unlock()
 
 	for _, job := range jobs {
+		if _, exists := pendingJobs[job.ID]; exists {
+			continue
+		}
 		select {
 		case tq.jobChannel <- job.ID:
 			logger.Debug("Enqueued pending job", "job_id", job.ID)

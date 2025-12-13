@@ -2642,7 +2642,7 @@ func (h *Handler) SetUserDefaultProfile(c *gin.Context) {
 	}
 
 	// Verify the profile exists
-	_, err := h.profileRepo.FindByID(c.Request.Context(), fmt.Sprintf("%s", req.ProfileID))
+	profile, err := h.profileRepo.FindByID(c.Request.Context(), fmt.Sprintf("%s", req.ProfileID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Profile not found"})
 		return
@@ -2659,6 +2659,19 @@ func (h *Handler) SetUserDefaultProfile(c *gin.Context) {
 	user.DefaultProfileID = &req.ProfileID
 	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set default profile"})
+		return
+	}
+
+	// Also updating system default profile as no UI available for it now
+	profile.IsDefault = true
+	allProfiles, _, err := h.profileRepo.List(c.Request.Context(), 0, 100)
+	for _, p := range allProfiles {
+		p.IsDefault = false
+		database.DB.Save(&p)
+	}
+
+	if err := h.profileRepo.Update(c.Request.Context(), profile); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to set system default profile"})
 		return
 	}
 
